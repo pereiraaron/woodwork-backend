@@ -29,7 +29,8 @@ describe('AppController (e2e)', () => {
       .get('/products')
       .expect(200)
       .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
+        expect(res.body).toHaveProperty('data');
+        expect(res.body).toHaveProperty('meta');
       });
   });
 });
