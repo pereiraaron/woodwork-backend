@@ -5,7 +5,7 @@ export type ProductDocument = HydratedDocument<Product>;
 
 @Schema({ timestamps: true })
 export class Product {
-  @Prop()
+  @Prop({ index: true, unique: true })
   id: string;
 
   @Prop()
@@ -23,19 +23,19 @@ export class Product {
   @Prop([String])
   colors: string[];
 
-  @Prop()
+  @Prop({ index: true })
   company: string;
 
   @Prop()
   description: string;
 
-  @Prop()
+  @Prop({ index: true })
   category: string;
 
   @Prop()
   shipping: boolean;
 
-  @Prop()
+  @Prop({ index: true })
   featured: boolean;
 
   @Prop()

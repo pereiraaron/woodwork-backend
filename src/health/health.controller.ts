@@ -5,7 +5,7 @@ import {
   MongooseHealthIndicator,
 } from '@nestjs/terminus';
 
-@Controller('health')
+@Controller()
 export class HealthController {
   constructor(
     private health: HealthCheckService,
@@ -13,6 +13,11 @@ export class HealthController {
   ) {}
 
   @Get()
+  root() {
+    return { status: 'ok', message: 'Woodwork API is running' };
+  }
+
+  @Get('health')
   @HealthCheck()
   check() {
     return this.health.check([() => this.mongoose.pingCheck('mongodb')]);

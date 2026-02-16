@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
+import { CartModule } from './cart/cart.module';
 import { HealthModule } from './health/health.module';
 import { ProductsModule } from './products/products.module';
 
@@ -15,6 +16,11 @@ import { ProductsModule } from './products/products.module';
       }),
     }),
     AuthModule,
+        bufferCommands: false,
+        serverSelectionTimeoutMS: 5000,
+      }),
+    }),
+    CartModule,
     HealthModule,
     ProductsModule,
   ],
