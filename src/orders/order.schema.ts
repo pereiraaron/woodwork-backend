@@ -33,6 +33,17 @@ export class OrderItem {
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
+@Schema()
+export class LineItem {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  amount: number;
+}
+
+export const LineItemSchema = SchemaFactory.createForClass(LineItem);
+
 @Schema({ timestamps: true })
 export class Order {
   @Prop({ required: true, index: true })
@@ -40,6 +51,9 @@ export class Order {
 
   @Prop({ type: [OrderItemSchema], required: true })
   items: OrderItem[];
+
+  @Prop({ type: [LineItemSchema], default: [] })
+  lineItems: LineItem[];
 
   @Prop({ required: true })
   total: number;

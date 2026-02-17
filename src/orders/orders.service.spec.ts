@@ -106,11 +106,10 @@ describe('OrdersService', () => {
 
       const result = await service.checkout('user1');
 
-      expect(result.order.total).toBe(490);
+      // 120*2 + 250*1 = 490 (no extra line items)
       expect(result.checkoutUrl).toBe('https://checkout.stripe.com/test');
-      // Verify order was created with current product prices (120*2 + 250*1 = 490)
       expect(mockOrderModel.create).toHaveBeenCalledWith(
-        expect.objectContaining({ total: 490 }),
+        expect.objectContaining({ total: 490, lineItems: [] }),
       );
       // Verify existing pending orders were cancelled
       expect(mockOrderModel.updateMany).toHaveBeenCalledWith(

@@ -9,7 +9,7 @@ import { Model, Types } from 'mongoose';
 import { Cart, CartDocument } from '../cart/cart.schema';
 import { PaymentsService } from '../payments/payments.service';
 import { Product, ProductDocument } from '../products/product.schema';
-import { Order, OrderDocument, OrderStatus } from './order.schema';
+import { LineItem, Order, OrderDocument, OrderStatus } from './order.schema';
 
 @Injectable()
 export class OrdersService {
@@ -24,6 +24,7 @@ export class OrdersService {
 
   async checkout(
     userId: string,
+    lineItems?: LineItem[],
   ): Promise<{ order: Order; checkoutUrl: string }> {
     const cart = await this.cartModel.findOne({ userId });
 
@@ -61,14 +62,21 @@ export class OrdersService {
       };
     });
 
-    const total = orderItems.reduce(
+    const extraLineItems = lineItems ?? [];
+    const subtotal = orderItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
+    const lineItemTotal = extraLineItems.reduce(
+      (sum, li) => sum + li.amount,
+      0,
+    );
+    const total = subtotal + lineItemTotal;
 
     const order = await this.orderModel.create({
       userId,
       items: orderItems,
+      lineItems: extraLineItems,
       total,
     });
 
@@ -76,6 +84,7 @@ export class OrdersService {
       String(order._id),
       userId,
       orderItems,
+      extraLineItems,
     );
 
     this.logger.log(

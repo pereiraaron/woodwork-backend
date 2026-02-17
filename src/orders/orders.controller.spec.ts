@@ -48,10 +48,13 @@ describe('OrdersController', () => {
 
   it('POST /orders — should checkout cart', async () => {
     const req = { user: { id: 'user1' } };
-    const result = await controller.checkout(req);
+    const dto = { lineItems: [{ name: 'Shipping', amount: 999 }] };
+    const result = await controller.checkout(req, dto);
 
     expect(result).toEqual(mockOrder);
-    expect(mockOrdersService.checkout).toHaveBeenCalledWith('user1');
+    expect(mockOrdersService.checkout).toHaveBeenCalledWith('user1', [
+      { name: 'Shipping', amount: 999 },
+    ]);
   });
 
   it('GET /orders — should return user orders', async () => {

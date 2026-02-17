@@ -29,10 +29,10 @@ export class PaymentsService {
     orderId: string,
     userId: string,
     items: { name: string; price: number; quantity: number; image: string }[],
+    extraLineItems: { name: string; amount: number }[] = [],
   ): Promise<string> {
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: items.map((item) => ({
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = items.map(
+      (item) => ({
         price_data: {
           currency: 'usd',
           product_data: {
@@ -42,7 +42,23 @@ export class PaymentsService {
           unit_amount: item.price,
         },
         quantity: item.quantity,
-      })),
+      }),
+    );
+
+    for (const li of extraLineItems) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: li.name },
+          unit_amount: li.amount,
+        },
+        quantity: 1,
+      });
+    }
+
+    const session = await this.stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
       metadata: { orderId, userId },
       success_url: `${this.configService.get<string>('CLIENT_URL', 'http://localhost:3000')}/orders?success=true`,
       cancel_url: `${this.configService.get<string>('CLIENT_URL', 'http://localhost:3000')}/cart?cancelled=true`,
