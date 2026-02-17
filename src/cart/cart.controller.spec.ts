@@ -50,9 +50,6 @@ describe('CartController', () => {
   it('should add item to cart', async () => {
     const body = {
       productId: 'rec123',
-      name: 'test chair',
-      price: 25999,
-      image: 'https://example.com/img.jpg',
       quantity: 1,
       color: '#ff0000',
     };
@@ -64,10 +61,14 @@ describe('CartController', () => {
   });
 
   it('should remove item from cart', async () => {
-    const result = await controller.removeItem(mockReq, 'rec123');
+    const result = await controller.removeItem(mockReq, 'rec123', undefined);
 
     expect(result.items).toHaveLength(0);
-    expect(mockCartService.removeItem).toHaveBeenCalledWith('user1', 'rec123');
+    expect(mockCartService.removeItem).toHaveBeenCalledWith(
+      'user1',
+      'rec123',
+      undefined,
+    );
   });
 
   it('should clear cart', async () => {
