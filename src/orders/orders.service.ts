@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Cart, CartDocument } from '../cart/cart.schema';
 import { PaymentsService } from '../payments/payments.service';
 import { Product, ProductDocument } from '../products/product.schema';
@@ -31,6 +31,12 @@ export class OrdersService {
       throw new BadRequestException('Cart is empty');
     }
 
+    // Cancel any existing pending orders to prevent orphaned orders
+    await this.orderModel.updateMany(
+      { userId, status: OrderStatus.Pending },
+      { status: OrderStatus.Cancelled },
+    );
+
     const productIds = cart.items.map((item) => item.productId);
     const products = await this.productModel.find({ id: { $in: productIds } });
     const productMap = new Map(products.map((p) => [p.id, p]));
@@ -42,19 +48,23 @@ export class OrdersService {
       }
     }
 
-    const total = cart.items.reduce(
+    // Use current product prices, not stale cart prices
+    const orderItems = cart.items.map((item) => {
+      const product = productMap.get(item.productId)!;
+      return {
+        productId: item.productId,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        quantity: item.quantity,
+        color: item.color,
+      };
+    });
+
+    const total = orderItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
-
-    const orderItems = cart.items.map((item) => ({
-      productId: item.productId,
-      name: item.name,
-      price: item.price,
-      image: item.image,
-      quantity: item.quantity,
-      color: item.color,
-    }));
 
     const order = await this.orderModel.create({
       userId,
@@ -80,6 +90,10 @@ export class OrdersService {
   }
 
   async getOrder(userId: string, orderId: string): Promise<Order> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      throw new NotFoundException(`Order "${orderId}" not found`);
+    }
+
     const order = await this.orderModel
       .findOne({ _id: orderId, userId })
       .lean();
@@ -92,6 +106,10 @@ export class OrdersService {
   }
 
   async cancelOrder(userId: string, orderId: string): Promise<Order> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      throw new NotFoundException(`Order "${orderId}" not found`);
+    }
+
     const order = await this.orderModel.findOne({ _id: orderId, userId });
 
     if (!order) {
@@ -104,7 +122,7 @@ export class OrdersService {
       );
     }
 
-    // TODO: Stock restore skipped — not an actual purchase workflow
+    // Stock restore skipped —I dont want to keep running migrations ro restock
     // for (const item of order.items) {
     //   await this.productModel.updateOne(
     //     { id: item.productId },

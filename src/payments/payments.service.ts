@@ -78,8 +78,19 @@ export class PaymentsService {
         return;
       }
 
+      // Verify order exists and belongs to the user
       const existing = await this.orderModel.findById(orderId).lean();
-      if (existing?.stripeSessionId) {
+      if (!existing) {
+        this.logger.warn(`Webhook references non-existent order ${orderId}`);
+        return;
+      }
+
+      if (existing.userId !== userId) {
+        this.logger.warn(`Webhook userId mismatch for order ${orderId}`);
+        return;
+      }
+
+      if (existing.stripeSessionId) {
         this.logger.warn(`Duplicate webhook for order ${orderId}, skipping`);
         return;
       }

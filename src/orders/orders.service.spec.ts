@@ -1,11 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './order.schema';
 import { Cart } from '../cart/cart.schema';
 import { Product } from '../products/product.schema';
 import { PaymentsService } from '../payments/payments.service';
+
+const VALID_ORDER_ID = new Types.ObjectId().toString();
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -33,6 +36,7 @@ describe('OrdersService', () => {
     create: jest.fn(),
     find: jest.fn(),
     findOne: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockCartModel = {
@@ -72,27 +76,47 @@ describe('OrdersService', () => {
   });
 
   describe('checkout', () => {
-    it('should create an order and return checkout URL', async () => {
+    it('should create an order using current product prices', async () => {
       mockCartModel.findOne.mockResolvedValue({ items: mockCartItems });
       mockProductModel.find.mockResolvedValue([
-        { id: 'prod1', stock: 10 },
-        { id: 'prod2', stock: 5 },
+        {
+          id: 'prod1',
+          name: 'Chair',
+          price: 120,
+          image: 'chair.jpg',
+          stock: 10,
+        },
+        {
+          id: 'prod2',
+          name: 'Table',
+          price: 250,
+          image: 'table.jpg',
+          stock: 5,
+        },
       ]);
       mockOrderModel.create.mockResolvedValue({
         _id: 'order123',
         toObject: () => ({
           userId: 'user1',
           items: mockCartItems,
-          total: 450,
+          total: 490,
           status: OrderStatus.Pending,
         }),
       });
 
       const result = await service.checkout('user1');
 
-      expect(result.order.total).toBe(450);
+      expect(result.order.total).toBe(490);
       expect(result.checkoutUrl).toBe('https://checkout.stripe.com/test');
-      expect(mockPaymentsService.createCheckoutSession).toHaveBeenCalled();
+      // Verify order was created with current product prices (120*2 + 250*1 = 490)
+      expect(mockOrderModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ total: 490 }),
+      );
+      // Verify existing pending orders were cancelled
+      expect(mockOrderModel.updateMany).toHaveBeenCalledWith(
+        { userId: 'user1', status: OrderStatus.Pending },
+        { status: OrderStatus.Cancelled },
+      );
     });
 
     it('should throw if cart is empty', async () => {
@@ -106,8 +130,20 @@ describe('OrdersService', () => {
     it('should throw if stock is insufficient', async () => {
       mockCartModel.findOne.mockResolvedValue({ items: mockCartItems });
       mockProductModel.find.mockResolvedValue([
-        { id: 'prod1', stock: 1 },
-        { id: 'prod2', stock: 5 },
+        {
+          id: 'prod1',
+          name: 'Chair',
+          price: 100,
+          image: 'chair.jpg',
+          stock: 1,
+        },
+        {
+          id: 'prod2',
+          name: 'Table',
+          price: 250,
+          image: 'table.jpg',
+          stock: 5,
+        },
       ]);
 
       await expect(service.checkout('user1')).rejects.toThrow(
@@ -139,7 +175,7 @@ describe('OrdersService', () => {
         lean: jest.fn().mockResolvedValue(mockOrder),
       });
 
-      const result = await service.getOrder('user1', 'order1');
+      const result = await service.getOrder('user1', VALID_ORDER_ID);
 
       expect(result).toEqual(mockOrder);
     });
@@ -149,14 +185,21 @@ describe('OrdersService', () => {
         lean: jest.fn().mockResolvedValue(null),
       });
 
-      await expect(service.getOrder('user1', 'order1')).rejects.toThrow(
+      await expect(service.getOrder('user1', VALID_ORDER_ID)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('should throw if orderId is not a valid ObjectId', async () => {
+      await expect(service.getOrder('user1', 'not-valid')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockOrderModel.findOne).not.toHaveBeenCalled();
     });
   });
 
   describe('cancelOrder', () => {
-    it('should cancel a pending order and restore stock', async () => {
+    it('should cancel a pending order', async () => {
       const mockOrder = {
         status: OrderStatus.Pending,
         items: mockCartItems,
@@ -170,7 +213,7 @@ describe('OrdersService', () => {
       };
       mockOrderModel.findOne.mockResolvedValue(mockOrder);
 
-      const result = await service.cancelOrder('user1', 'order1');
+      const result = await service.cancelOrder('user1', VALID_ORDER_ID);
 
       expect(result.status).toBe(OrderStatus.Cancelled);
     });
@@ -180,17 +223,24 @@ describe('OrdersService', () => {
         status: OrderStatus.Confirmed,
       });
 
-      await expect(service.cancelOrder('user1', 'order1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.cancelOrder('user1', VALID_ORDER_ID),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw if order not found', async () => {
       mockOrderModel.findOne.mockResolvedValue(null);
 
-      await expect(service.cancelOrder('user1', 'order1')).rejects.toThrow(
+      await expect(
+        service.cancelOrder('user1', VALID_ORDER_ID),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw if orderId is not a valid ObjectId', async () => {
+      await expect(service.cancelOrder('user1', 'not-valid')).rejects.toThrow(
         NotFoundException,
       );
+      expect(mockOrderModel.findOne).not.toHaveBeenCalled();
     });
   });
 });

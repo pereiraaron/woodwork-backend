@@ -109,7 +109,9 @@ describe('PaymentsService', () => {
     it('should confirm order and clear cart', async () => {
       mockStripe.webhooks.constructEvent.mockReturnValue(mockStripeEvent);
       mockOrderModel.findById.mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ stripeSessionId: null }),
+        lean: jest
+          .fn()
+          .mockResolvedValue({ userId: 'user1', stripeSessionId: null }),
       });
       mockOrderModel.findByIdAndUpdate.mockResolvedValue(undefined);
       mockCartModel.findOneAndUpdate.mockResolvedValue(undefined);
@@ -147,12 +149,40 @@ describe('PaymentsService', () => {
       expect(mockOrderModel.findById).not.toHaveBeenCalled();
     });
 
+    it('should skip if order does not exist', async () => {
+      mockStripe.webhooks.constructEvent.mockReturnValue(mockStripeEvent);
+      mockOrderModel.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      });
+
+      await service.handleWebhook(payload, signature);
+
+      expect(mockOrderModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(mockCartModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should skip if order userId does not match metadata', async () => {
+      mockStripe.webhooks.constructEvent.mockReturnValue(mockStripeEvent);
+      mockOrderModel.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          userId: 'different-user',
+          stripeSessionId: null,
+        }),
+      });
+
+      await service.handleWebhook(payload, signature);
+
+      expect(mockOrderModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(mockCartModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
     it('should skip duplicate webhook events', async () => {
       mockStripe.webhooks.constructEvent.mockReturnValue(mockStripeEvent);
       mockOrderModel.findById.mockReturnValue({
-        lean: jest
-          .fn()
-          .mockResolvedValue({ stripeSessionId: 'cs_already_set' }),
+        lean: jest.fn().mockResolvedValue({
+          userId: 'user1',
+          stripeSessionId: 'cs_already_set',
+        }),
       });
 
       await service.handleWebhook(payload, signature);

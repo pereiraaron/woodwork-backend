@@ -1,70 +1,125 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Product, ProductDocument } from '../products/product.schema';
 import { Cart, CartDocument } from './cart.schema';
 
 const MAX_CART_ITEMS = 5;
+const MAX_ITEM_QUANTITY = 10;
 
 interface AddToCartDto {
   productId: string;
-  name: string;
-  price: number;
-  image: string;
   quantity?: number;
   color?: string;
 }
 
 @Injectable()
 export class CartService {
-  constructor(@InjectModel(Cart.name) private cartModel: Model<CartDocument>) {}
+  constructor(
+    @InjectModel(Cart.name) private cartModel: Model<CartDocument>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+  ) {}
 
   async getCart(
     userId: string,
   ): Promise<{ userId: string; items: Cart['items'] }> {
     const cart = await this.cartModel.findOne({ userId }).lean();
-    if (!cart) {
-      return { userId, items: [] };
-    }
-    return cart;
+    return { userId, items: cart?.items ?? [] };
   }
 
   async addItem(userId: string, dto: AddToCartDto): Promise<Cart> {
-    let cart = await this.cartModel.findOne({ userId });
+    const color = dto.color ?? '';
+    const quantity = dto.quantity ?? 1;
 
-    if (!cart) {
-      cart = new this.cartModel({ userId, items: [] });
+    // Look up product for trusted price/name/image
+    const product = await this.productModel.findOne({ id: dto.productId });
+    if (!product) {
+      throw new NotFoundException(`Product "${dto.productId}" not found`);
     }
 
-    const existingIndex = cart.items.findIndex(
-      (item) => item.productId === dto.productId && item.color === dto.color,
+    if (color && !product.colors.includes(color)) {
+      throw new BadRequestException(
+        `Invalid color "${color}" for this product`,
+      );
+    }
+
+    // Try to increment quantity if item already exists (atomic, with max cap)
+    const updated = await this.cartModel.findOneAndUpdate(
+      {
+        userId,
+        'items.productId': dto.productId,
+        'items.color': color,
+        'items.quantity': { $lte: MAX_ITEM_QUANTITY - quantity },
+      },
+      { $inc: { 'items.$.quantity': quantity } },
+      { new: true },
     );
 
-    if (existingIndex >= 0) {
-      cart.items[existingIndex].quantity += dto.quantity ?? 1;
-    } else {
-      if (cart.items.length >= MAX_CART_ITEMS) {
+    if (updated) {
+      return updated.toObject();
+    }
+
+    // Check if item exists but would exceed max quantity
+    const existing = await this.cartModel.findOne({
+      userId,
+      'items.productId': dto.productId,
+      'items.color': color,
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `Cannot exceed ${MAX_ITEM_QUANTITY} of the same item`,
+      );
+    }
+
+    // Item doesn't exist — push new item, enforcing max cart size atomically
+    const newItem = {
+      productId: dto.productId,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      quantity,
+      color,
+    };
+
+    try {
+      const pushed = await this.cartModel.findOneAndUpdate(
+        { userId, [`items.${MAX_CART_ITEMS - 1}`]: { $exists: false } },
+        { $push: { items: newItem } },
+        { new: true, upsert: true },
+      );
+      return pushed.toObject();
+    } catch (err: unknown) {
+      // Duplicate key = cart exists but is full (upsert tried to create a new doc)
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as { code: number }).code === 11000
+      ) {
         throw new BadRequestException(
           `Cart cannot have more than ${MAX_CART_ITEMS} items`,
         );
       }
-      cart.items.push({
-        productId: dto.productId,
-        name: dto.name,
-        price: dto.price,
-        image: dto.image,
-        quantity: dto.quantity ?? 1,
-        color: dto.color ?? '',
-      });
+      throw err;
     }
-
-    await cart.save();
-    return cart.toObject();
   }
 
-  async removeItem(userId: string, productId: string): Promise<Cart> {
+  async removeItem(
+    userId: string,
+    productId: string,
+    color?: string,
+  ): Promise<Cart> {
+    const pullFilter: Record<string, string> = { productId };
+    if (color !== undefined) {
+      pullFilter.color = color;
+    }
+
     const cart = await this.cartModel.findOneAndUpdate(
       { userId },
-      { $pull: { items: { productId } } },
+      { $pull: { items: pullFilter } },
       { new: true },
     );
     return cart?.toObject() ?? ({ userId, items: [] } as Cart);
