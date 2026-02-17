@@ -5,13 +5,17 @@ import {
   Post,
   RawBody,
 } from '@nestjs/common';
+import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 
+@ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post('webhook')
+  @ApiOperation({ summary: 'Stripe webhook handler' })
+  @ApiExcludeEndpoint()
   async handleWebhook(
     @RawBody() payload: Buffer,
     @Headers('stripe-signature') signature: string,
