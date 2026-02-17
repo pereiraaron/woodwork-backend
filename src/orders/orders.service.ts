@@ -122,7 +122,7 @@ export class OrdersService {
       );
     }
 
-    // Stock restore skipped —I dont want to keep running migrations ro restockx
+    // Stock restore skipped —I dont want to keep running migrations ro restock
     // for (const item of order.items) {
     //   await this.productModel.updateOne(
     //     { id: item.productId },
