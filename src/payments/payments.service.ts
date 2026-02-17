@@ -39,7 +39,7 @@ export class PaymentsService {
             name: item.name,
             images: [item.image],
           },
-          unit_amount: Math.round(item.price * 100),
+          unit_amount: item.price,
         },
         quantity: item.quantity,
       })),
