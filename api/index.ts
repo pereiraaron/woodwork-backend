@@ -37,8 +37,6 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
 
-  await app.init();
-
   server.get('/api/docs/swagger.json', (_req: Request, res: Response) => {
     res.json(document);
   });
@@ -69,6 +67,7 @@ async function bootstrap() {
 </html>`);
   });
 
+  await app.init();
   isReady = true;
 }
 
